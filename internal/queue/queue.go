@@ -159,6 +159,12 @@ func (q *Queue) Push(e Event) error {
 // Pop blocks until an event is available, the queue is closed, or ctx is done.
 func (q *Queue) Pop(ctx context.Context) (Event, error) {
 	for {
+		// Checked before the buffer is served: a cancelled consumer must
+		// stop taking work, otherwise a hard shutdown keeps handing events
+		// to workers that are already being torn down.
+		if err := ctx.Err(); err != nil {
+			return Event{}, err
+		}
 		if e, ok := q.TryPop(); ok {
 			return e, nil
 		}
@@ -231,6 +237,25 @@ func (q *Queue) TryPop() (Event, bool) {
 		return Event{}, false
 	}
 	return heap.Pop(&q.items).(item).event, true
+}
+
+// DrainRemaining removes and returns every buffered event in drain order.
+//
+// Shutdown needs the leftovers in one go: popping them one at a time races
+// against workers that are still finishing, and the caller ends up holding a
+// partial batch it cannot account for.
+func (q *Queue) DrainRemaining() []Event {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	if len(q.items) == 0 {
+		return nil
+	}
+	drained := make([]Event, 0, len(q.items))
+	for len(q.items) > 0 {
+		drained = append(drained, heap.Pop(&q.items).(item).event)
+	}
+	return drained
 }
 
 // Len reports the number of buffered events.
