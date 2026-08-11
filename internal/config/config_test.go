@@ -88,8 +88,8 @@ func TestEveryBindingHasAUniqueKey(t *testing.T) {
 		}
 		seen[b.key] = true
 	}
-	if len(seen) != 10 {
-		t.Errorf("bindings = %d, want 10", len(seen))
+	if len(seen) != 15 {
+		t.Errorf("bindings = %d, want 15", len(seen))
 	}
 }
 
@@ -147,15 +147,52 @@ func TestValidateRequiresTokenInProd(t *testing.T) {
 		t.Fatal("expected prod without a token to be rejected")
 	}
 
-	cfg.UpstreamToken = "secret"
+	cfg.Upstream.Token = "secret"
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("prod with a token should validate, got %v", err)
 	}
 }
 
+func TestUpstreamBindingsResolve(t *testing.T) {
+	cfg, err := LoadFrom(envFrom(map[string]string{
+		"INGESTD_UPSTREAM_URL":          "https://events.internal/v2",
+		"INGESTD_UPSTREAM_MAX_ATTEMPTS": "9",
+		"INGESTD_RETRY_BASE_DELAY":      "50ms",
+		"INGESTD_BREAKER_THRESHOLD":     "20",
+		"INGESTD_BREAKER_WINDOW":        "1m",
+	}))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Upstream.URL != "https://events.internal/v2" {
+		t.Errorf("url = %q", cfg.Upstream.URL)
+	}
+	if cfg.Upstream.MaxAttempts != 9 {
+		t.Errorf("max attempts = %d, want 9", cfg.Upstream.MaxAttempts)
+	}
+	if cfg.Upstream.RetryBaseDelay != 50*time.Millisecond {
+		t.Errorf("retry base delay = %s, want 50ms", cfg.Upstream.RetryBaseDelay)
+	}
+	if cfg.Upstream.BreakerWindow != time.Minute {
+		t.Errorf("breaker window = %s, want 1m", cfg.Upstream.BreakerWindow)
+	}
+	// Untouched members of the group keep their defaults.
+	if cfg.Upstream.BreakerCooldown != Default().Upstream.BreakerCooldown {
+		t.Errorf("breaker cooldown = %s, want the default", cfg.Upstream.BreakerCooldown)
+	}
+}
+
+func TestValidateRejectsZeroAttempts(t *testing.T) {
+	cfg := Default()
+	cfg.Upstream.MaxAttempts = 0
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected a zero attempt budget to be rejected")
+	}
+}
+
 func TestStringRedactsToken(t *testing.T) {
 	cfg := Default()
-	cfg.UpstreamToken = "super-secret"
+	cfg.Upstream.Token = "super-secret"
 	if strings.Contains(cfg.String(), "super-secret") {
 		t.Error("String() leaked the upstream token")
 	}

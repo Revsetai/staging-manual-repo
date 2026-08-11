@@ -25,6 +25,25 @@ type Policy struct {
 	// Rand supplies the jitter. Leave it nil to use the global source; tests
 	// set it so that a delay sequence is reproducible.
 	Rand *rand.Rand
+	// Retryable decides whether an error is worth another attempt. Leave it
+	// nil to retry everything that is not explicitly Permanent.
+	//
+	// A caller that wraps a dependency in something with its own opinion —
+	// a circuit breaker, a rate limiter — cannot mark those errors permanent
+	// at the point they are created, because they are only meaningless to
+	// retry from the perspective of the policy that owns them.
+	Retryable func(error) bool
+}
+
+// shouldRetry applies the policy's filter on top of the permanent marker.
+func (p Policy) shouldRetry(err error) bool {
+	if err == nil || IsPermanent(err) {
+		return false
+	}
+	if p.Retryable != nil {
+		return p.Retryable(err)
+	}
+	return true
 }
 
 // DefaultPolicy is a conservative policy suited to upstream HTTP calls.
@@ -162,7 +181,7 @@ func Do(ctx context.Context, p Policy, op Operation) error {
 		switch {
 		case last == nil:
 			return nil
-		case IsPermanent(last):
+		case !p.shouldRetry(last):
 			return last
 		case number == attempts-1:
 			return &ExhaustedError{
