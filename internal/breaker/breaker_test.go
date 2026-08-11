@@ -99,8 +99,8 @@ func TestFailuresOutsideTheWindowDoNotTrip(t *testing.T) {
 	if got := b.State(); got != StateClosed {
 		t.Fatalf("state = %s, want closed", got)
 	}
-	if got := b.Failures(); got != 0 {
-		t.Errorf("failures in window = %d, want 0", got)
+	if got := b.Snapshot(); got.Failures != 0 {
+		t.Errorf("failures in window = %d, want 0", got.Failures)
 	}
 }
 
@@ -112,8 +112,8 @@ func TestFailuresInsideTheWindowAccumulate(t *testing.T) {
 	c.advance(time.Second)
 	_ = b.Call(ctx, fail)
 
-	if got := b.Failures(); got != 2 {
-		t.Fatalf("failures in window = %d, want 2", got)
+	if got := b.Snapshot(); got.Failures != 2 {
+		t.Fatalf("failures in window = %d, want 2", got.Failures)
 	}
 	if got := b.State(); got != StateClosed {
 		t.Fatalf("state = %s, want closed below the threshold", got)
@@ -135,8 +135,38 @@ func TestSuccessDoesNotEraseWindowedFailures(t *testing.T) {
 	c.advance(time.Second)
 	_ = b.Call(ctx, fail)
 
-	if got := b.Failures(); got != 2 {
-		t.Fatalf("failures in window = %d, want 2; a success must not clear history", got)
+	if got := b.Snapshot(); got.Failures != 2 {
+		t.Fatalf("failures in window = %d, want 2; a success must not clear history", got.Failures)
+	}
+}
+
+func TestSnapshotReportsHowLongTheCircuitHasBeenOpen(t *testing.T) {
+	b, c := newTestBreaker(t)
+	ctx := context.Background()
+	for i := 0; i < 3; i++ {
+		_ = b.Call(ctx, fail)
+	}
+
+	c.advance(20 * time.Second)
+	snap := b.Snapshot()
+
+	if snap.Healthy() {
+		t.Error("an open circuit is not healthy")
+	}
+	if snap.OpenFor != 20*time.Second {
+		t.Errorf("open for = %s, want 20s", snap.OpenFor)
+	}
+}
+
+func TestSnapshotOfAClosedBreakerHasNoOpenDuration(t *testing.T) {
+	b, _ := newTestBreaker(t)
+	snap := b.Snapshot()
+
+	if !snap.Healthy() {
+		t.Error("a fresh breaker should be healthy")
+	}
+	if snap.OpenFor != 0 {
+		t.Errorf("open for = %s, want 0", snap.OpenFor)
 	}
 }
 

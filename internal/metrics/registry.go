@@ -52,6 +52,10 @@ const (
 	KindGauge
 	// KindHistogram is a bucketed distribution.
 	KindHistogram
+	// KindInfo is a constant series whose labels carry the information; the
+	// value is always 1. Build stamps and feature toggles live here rather
+	// than being smuggled into a gauge nobody can read.
+	KindInfo
 )
 
 // String renders the kind for export.
@@ -63,6 +67,8 @@ func (k Kind) String() string {
 		return "gauge"
 	case KindHistogram:
 		return "histogram"
+	case KindInfo:
+		return "gauge"
 	default:
 		return "untyped"
 	}
@@ -122,11 +128,21 @@ func (g *Gauge) Value() float64 {
 // Name reports the gauge's metric name.
 func (g *Gauge) Name() string { return g.name }
 
+// Info is a constant series describing the process.
+type Info struct {
+	name   string
+	labels Labels
+}
+
+// Name reports the info series' metric name.
+func (i *Info) Name() string { return i.name }
+
 // Registry owns every instrument in the process.
 type Registry struct {
 	mu       sync.RWMutex
 	counters map[string]*Counter
 	gauges   map[string]*Gauge
+	infos    map[string]*Info
 }
 
 // NewRegistry builds an empty registry.
@@ -134,6 +150,7 @@ func NewRegistry() *Registry {
 	return &Registry{
 		counters: make(map[string]*Counter),
 		gauges:   make(map[string]*Gauge),
+		infos:    make(map[string]*Info),
 	}
 }
 
@@ -184,6 +201,14 @@ func (r *Registry) Gauge(name string, labels Labels) *Gauge {
 	})
 }
 
+// Info registers a constant series carrying labels and the value 1.
+func (r *Registry) Info(name string, labels Labels) *Info {
+	id := identity(name, labels)
+	return lookup(r, r.infos, id, func() *Info {
+		return &Info{name: name, labels: labels}
+	})
+}
+
 // Sample is a point-in-time reading of one instrument.
 type Sample struct {
 	// ID is the rendered name{labels} identity, carried so that callers
@@ -198,7 +223,7 @@ type Sample struct {
 // Snapshot returns every instrument's current value, sorted by identity.
 func (r *Registry) Snapshot() []Sample {
 	r.mu.RLock()
-	samples := make([]Sample, 0, len(r.counters)+len(r.gauges))
+	samples := make([]Sample, 0, len(r.counters)+len(r.gauges)+len(r.infos))
 	for id, c := range r.counters {
 		samples = append(samples, Sample{
 			ID:     id,
@@ -215,6 +240,15 @@ func (r *Registry) Snapshot() []Sample {
 			Kind:   KindGauge,
 			Labels: g.labels,
 			Value:  g.Value(),
+		})
+	}
+	for id, i := range r.infos {
+		samples = append(samples, Sample{
+			ID:     id,
+			Name:   i.name,
+			Kind:   KindInfo,
+			Labels: i.labels,
+			Value:  1,
 		})
 	}
 	r.mu.RUnlock()

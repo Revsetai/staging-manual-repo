@@ -24,12 +24,14 @@ func NewEncoder(namespace string) *Encoder {
 	return &Encoder{Namespace: namespace, Help: make(map[string]string)}
 }
 
-// Describe records the HELP text for a metric name.
-func (e *Encoder) Describe(name, help string) {
+// Describe records the HELP text for a metric name and returns the encoder,
+// so a batch of declarations can be chained at construction.
+func (e *Encoder) Describe(name, help string) *Encoder {
 	if e.Help == nil {
 		e.Help = make(map[string]string)
 	}
 	e.Help[name] = help
+	return e
 }
 
 // qualify applies the namespace to a bare metric name.
