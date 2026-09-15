@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Ingestd operations</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="masthead">
+        <div>
+          <p class="eyebrow">Ingestd / live runtime</p>
+          <h1>Pipeline control room</h1>
+        </div>
+        <div class="status-pill" data-role="status">
+          <span class="status-dot"></span>
+          <span data-role="status-label">Connecting</span>
+        </div>
+      </header>
+
+      <section class="hero-grid" aria-label="Runtime summary">
+        <article class="card queue-card">
+          <div class="card-heading">
+            <div>
+              <p class="eyebrow">Buffer pressure</p>
+              <h2>Event queue</h2>
+            </div>
+            <span class="metric" data-role="queue-ratio">—</span>
+          </div>
+          <div class="meter" aria-label="Queue capacity">
+            <span data-role="queue-meter"></span>
+          </div>
+          <div class="split-metrics">
+            <div><strong data-role="queue-depth">—</strong><span>queued</span></div>
+            <div><strong data-role="queue-capacity">—</strong><span>capacity</span></div>
+          </div>
+        </article>
+
+        <article class="card">
+          <p class="eyebrow">Throughput</p>
+          <h2>Workers</h2>
+          <div class="worker-stats">
+            <div><strong data-role="worker-active">—</strong><span>active</span></div>
+            <div><strong data-role="worker-processed">—</strong><span>processed</span></div>
+            <div><strong data-role="worker-failed">—</strong><span>failed</span></div>
+          </div>
+        </article>
+
+        <article class="card uptime-card">
+          <p class="eyebrow">Process age</p>
+          <h2 data-role="uptime">—</h2>
+          <p class="muted">Snapshot <time data-role="captured-at">waiting for runtime</time></p>
+        </article>
+      </section>
+
+      <section class="workspace">
+        <article class="card event-card">
+          <div>
+            <p class="eyebrow">Traffic simulator</p>
+            <h2>Inject an event</h2>
+            <p class="muted">Send work through the same queue and worker contracts used by production traffic.</p>
+          </div>
+          <form data-role="event-form">
+            <label>Source<input name="source" value="dashboard.demo" required /></label>
+            <label>Payload<textarea name="payload" rows="5">{"action":"refresh","scope":"customers"}</textarea></label>
+            <button type="submit">Queue event <span>→</span></button>
+          </form>
+          <p class="notice" data-role="notice" aria-live="polite"></p>
+        </article>
+
+        <article class="card flow-card">
+          <p class="eyebrow">Connected system</p>
+          <h2>Event path</h2>
+          <ol class="flow">
+            <li><span>01</span><div><strong>HTTP intake</strong><small>validates and accepts</small></div></li>
+            <li><span>02</span><div><strong>Bounded queue</strong><small>absorbs backpressure</small></div></li>
+            <li><span>03</span><div><strong>Worker pool</strong><small>processes concurrently</small></div></li>
+            <li><span>04</span><div><strong>Live snapshot</strong><small>closes the feedback loop</small></div></li>
+          </ol>
+        </article>
+      </section>
+    </main>
+    <script type="module" src="/app.mjs"></script>
+  </body>
+</html>

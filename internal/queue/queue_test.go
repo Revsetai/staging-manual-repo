@@ -57,3 +57,24 @@ func TestPushStampsEnqueuedAt(t *testing.T) {
 		t.Fatal("EnqueuedAt was not stamped")
 	}
 }
+
+func TestSnapshotReportsPressureAndClosedState(t *testing.T) {
+	q := New(3)
+	if err := q.Push(Event{ID: "a"}); err != nil {
+		t.Fatalf("push: %v", err)
+	}
+
+	before := q.Snapshot()
+	if before.Depth != 1 || before.Capacity != 3 || before.Closed {
+		t.Fatalf("snapshot before close = %#v", before)
+	}
+
+	q.Close()
+	q.Close()
+	if got := q.Snapshot(); !got.Closed {
+		t.Fatalf("snapshot after close = %#v", got)
+	}
+	if err := q.Push(Event{ID: "b"}); !errors.Is(err, ErrClosed) {
+		t.Fatalf("push after close = %v, want ErrClosed", err)
+	}
+}
