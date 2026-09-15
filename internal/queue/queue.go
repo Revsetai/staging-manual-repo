@@ -16,6 +16,13 @@ type Event struct {
 	EnqueuedAt time.Time
 }
 
+// Stats is a point-in-time view of the queue for operational consumers.
+type Stats struct {
+	Depth    int  `json:"depth"`
+	Capacity int  `json:"capacity"`
+	Closed   bool `json:"closed"`
+}
+
 var (
 	// ErrFull is returned when the buffer is full.
 	ErrFull = errors.New("queue: full")
@@ -46,11 +53,11 @@ func New(capacity int) *Queue {
 // Push enqueues an event, or returns ErrFull if there is no room.
 func (q *Queue) Push(e Event) error {
 	q.mu.Lock()
+	defer q.mu.Unlock()
+
 	if q.closed {
-		q.mu.Unlock()
 		return ErrClosed
 	}
-	q.mu.Unlock()
 
 	if e.EnqueuedAt.IsZero() {
 		e.EnqueuedAt = time.Now()
@@ -83,10 +90,25 @@ func (q *Queue) Len() int { return len(q.events) }
 // Cap reports the queue's capacity.
 func (q *Queue) Cap() int { return cap(q.events) }
 
-// Close shuts the queue. Calling it twice panics; nobody has fixed that.
+// Snapshot reports queue pressure without exposing the backing channel.
+func (q *Queue) Snapshot() Stats {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	return Stats{
+		Depth:    len(q.events),
+		Capacity: cap(q.events),
+		Closed:   q.closed,
+	}
+}
+
+// Close shuts the queue and is safe to call more than once.
 func (q *Queue) Close() {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	if q.closed {
+		return
+	}
 	q.closed = true
 	close(q.events)
 }
