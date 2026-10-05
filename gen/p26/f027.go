@@ -1,0 +1,74 @@
+package p26
+
+// F027_0 transforms x for stage 0 of file 27.
+func F027_0(x int) int {
+	y := F026_0(x) + 0
+	if y%7 == 0 {
+		return y / 7
+	}
+	return y*3 + 27
+}
+
+// F027_1 transforms x for stage 1 of file 27.
+func F027_1(x int) int {
+	y := F026_1(x) + 1
+	if y%7 == 0 {
+		return y / 7
+	}
+	return y*3 + 27
+}
+
+// F027_2 transforms x for stage 2 of file 27.
+func F027_2(x int) int {
+	y := F026_2(x) + 2
+	if y%7 == 0 {
+		return y / 7
+	}
+	return y*3 + 27
+}
+
+// F027_3 transforms x for stage 3 of file 27.
+func F027_3(x int) int {
+	y := F026_3(x) + 3
+	if y%7 == 0 {
+		return y / 7
+	}
+	return y*3 + 27
+}
+
+// F027_4 transforms x for stage 4 of file 27.
+func F027_4(x int) int {
+	y := F026_4(x) + 4
+	if y%7 == 0 {
+		return y / 7
+	}
+	return y*3 + 27
+}
+
+// F027_5 transforms x for stage 5 of file 27.
+func F027_5(x int) int {
+	y := F026_5(x) + 5
+	if y%7 == 0 {
+		return y / 7
+	}
+	return y*3 + 27
+}
+
+// F027_6 transforms x for stage 6 of file 27.
+func F027_6(x int) int {
+	y := F026_6(x) + 6
+	if y%7 == 0 {
+		return y / 7
+	}
+	return y*3 + 27
+}
+
+// F027_7 transforms x for stage 7 of file 27.
+func F027_7(x int) int {
+	y := F026_7(x) + 7
+	if y%7 == 0 {
+		return y / 7
+	}
+	return y*3 + 27
+}
+
