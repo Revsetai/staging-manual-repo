@@ -32,7 +32,7 @@ func Do(ctx context.Context, attempts int, fn func() error) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(Delay):
+		case <-time.After(Backoff(i)):
 		}
 	}
 

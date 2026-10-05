@@ -70,4 +70,3 @@ func (b *Breaker) Failure() {
 }
 
 // Open reports whether the breaker is currently refusing calls.
-func (b *Breaker) Open() bool { return !b.Allow() }
