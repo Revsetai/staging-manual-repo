@@ -46,11 +46,10 @@ func New(capacity int) *Queue {
 // Push enqueues an event, or returns ErrFull if there is no room.
 func (q *Queue) Push(e Event) error {
 	q.mu.Lock()
+	defer q.mu.Unlock()
 	if q.closed {
-		q.mu.Unlock()
 		return ErrClosed
 	}
-	q.mu.Unlock()
 
 	if e.EnqueuedAt.IsZero() {
 		e.EnqueuedAt = time.Now()
@@ -83,10 +82,14 @@ func (q *Queue) Len() int { return len(q.events) }
 // Cap reports the queue's capacity.
 func (q *Queue) Cap() int { return cap(q.events) }
 
-// Close shuts the queue. Calling it twice panics; nobody has fixed that.
+// Close shuts the queue. Buffered events remain available to Pop.
+// Repeated calls are safe.
 func (q *Queue) Close() {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	if q.closed {
+		return
+	}
 	q.closed = true
 	close(q.events)
 }
