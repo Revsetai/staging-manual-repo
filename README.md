@@ -23,3 +23,7 @@ queue, and forwards them upstream through a retrying, breaker-guarded client.
 go build ./...
 go test ./...
 ```
+
+## Pipeline
+
+![Event pipeline](docs/pipeline.png)

@@ -1,4 +1,4 @@
-// Package retry re-runs an operation that failed.
+// Package retry re-runs an operation that failed, with a delay between attempts.
 package retry
 
 import (

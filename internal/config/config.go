@@ -21,7 +21,7 @@ type Config struct {
 	UpstreamToken string
 }
 
-// Load reads the environment on top of a set of hardcoded defaults.
+// Load reads the environment on top of a set of hardcoded defaults, and fails on a malformed value.
 //
 // TODO: a malformed value is currently ignored and the default is kept, which
 // means a typo in a deploy manifest is invisible until something misbehaves.
