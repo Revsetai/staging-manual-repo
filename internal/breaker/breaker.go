@@ -70,3 +70,5 @@ func (b *Breaker) Failure() {
 }
 
 // Open reports whether the breaker is currently refusing calls.
+
+// revset e2e check
