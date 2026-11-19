@@ -1,43 +1,117 @@
 package metrics
 
-import "testing"
+import (
+	"strings"
+	"sync"
+	"testing"
+)
 
-func TestAddAccumulates(t *testing.T) {
+func TestCounterIsSharedPerIdentity(t *testing.T) {
 	r := NewRegistry()
-	r.Inc("events_total", Labels{"source": "http"})
-	r.Add("events_total", Labels{"source": "http"}, 4)
+	a := r.Counter("events_total", Labels{"source": "http"})
+	b := r.Counter("events_total", Labels{"source": "http"})
+	if a != b {
+		t.Fatal("expected the same counter instance for the same identity")
+	}
 
-	if got := r.Value("events_total", Labels{"source": "http"}); got != 5 {
-		t.Fatalf("value = %g, want 5", got)
+	other := r.Counter("events_total", Labels{"source": "grpc"})
+	if a == other {
+		t.Fatal("different labels must produce different counters")
 	}
 }
 
-func TestSetReplaces(t *testing.T) {
+func TestCounterAddIsConcurrencySafe(t *testing.T) {
 	r := NewRegistry()
-	r.Set("queue_depth", nil, 9)
-	r.Set("queue_depth", nil, 3)
+	c := r.Counter("accepted_total", nil)
 
-	if got := r.Value("queue_depth", nil); got != 3 {
-		t.Fatalf("value = %g, want 3", got)
+	var wg sync.WaitGroup
+	for i := 0; i < 64; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 100; j++ {
+				c.Inc()
+			}
+		}()
+	}
+	wg.Wait()
+
+	if got := c.Value(); got != 6400 {
+		t.Fatalf("value = %d, want 6400", got)
+	}
+}
+
+func TestGaugeMovesBothWays(t *testing.T) {
+	r := NewRegistry()
+	g := r.Gauge("queue_depth", nil)
+	g.Set(10)
+	g.Add(-4)
+	if got := g.Value(); got != 6 {
+		t.Fatalf("value = %g, want 6", got)
+	}
+}
+
+func TestGaugeAddIsConcurrencySafe(t *testing.T) {
+	r := NewRegistry()
+	g := r.Gauge("queue_depth", nil)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 32; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 50; j++ {
+				g.Add(1)
+				g.Add(-0.5)
+			}
+		}()
+	}
+	wg.Wait()
+
+	if got := g.Value(); got != 800 {
+		t.Fatalf("value = %g, want 800", got)
 	}
 }
 
 func TestSnapshotIsSorted(t *testing.T) {
 	r := NewRegistry()
-	r.Inc("zeta_total", nil)
-	r.Inc("alpha_total", nil)
+	r.Counter("zeta_total", nil).Inc()
+	r.Counter("alpha_total", nil).Add(3)
+	r.Gauge("mid_gauge", nil).Set(1)
 
 	samples := r.Snapshot()
-	if len(samples) != 2 {
-		t.Fatalf("len = %d, want 2", len(samples))
+	if len(samples) != 3 {
+		t.Fatalf("len(samples) = %d, want 3", len(samples))
 	}
-	if samples[0].Name != "alpha_total" {
-		t.Errorf("first sample = %q", samples[0].Name)
+	want := []string{"alpha_total", "mid_gauge", "zeta_total"}
+	for i, name := range want {
+		if samples[i].Name != name {
+			t.Errorf("samples[%d].Name = %q, want %q", i, samples[i].Name, name)
+		}
 	}
 }
 
-func TestKeyIsOrderIndependent(t *testing.T) {
-	if key("m", Labels{"a": "1", "b": "2"}) != key("m", Labels{"b": "2", "a": "1"}) {
-		t.Fatal("label ordering changed the key")
+func TestSnapshotCarriesTheRenderedIdentity(t *testing.T) {
+	r := NewRegistry()
+	r.Counter("events_total", Labels{"source": "http"}).Inc()
+
+	samples := r.Snapshot()
+	if len(samples) != 1 {
+		t.Fatalf("len(samples) = %d, want 1", len(samples))
+	}
+	want := `events_total{source=http}`
+	if samples[0].ID != want {
+		t.Errorf("ID = %q, want %q", samples[0].ID, want)
+	}
+	if !strings.Contains(samples[0].String(), want) {
+		t.Errorf("String() = %q", samples[0].String())
+	}
+}
+
+func TestLabelsKeyIsStable(t *testing.T) {
+	first := Labels{"b": "2", "a": "1"}.key()
+	second := Labels{"a": "1", "b": "2"}.key()
+	if first != second {
+		t.Fatalf("label key is not order-independent: %q vs %q", first, second)
 	}
 }

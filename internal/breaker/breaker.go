@@ -140,12 +140,36 @@ func (b *Breaker) expire(now time.Time) {
 	b.failures = keep
 }
 
-// Failures reports how many failures are currently inside the window.
-func (b *Breaker) Failures() int {
+// Snapshot is a consistent read of the breaker's state and counters.
+//
+// The individual accessors each took the lock separately, so a caller that
+// wanted both the state and the failure count could observe a state from
+// before a trip and a count from after it. Readiness probes report that pair
+// together, so it has to be read together.
+type Snapshot struct {
+	State    State
+	Failures int
+	// OpenFor is how long the circuit has been open, zero when it is not.
+	OpenFor time.Duration
+}
+
+// Healthy reports whether the breaker is admitting calls.
+func (s Snapshot) Healthy() bool { return s.State != StateOpen }
+
+// Snapshot reads the breaker's state and counters under a single lock.
+func (b *Breaker) Snapshot() Snapshot {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.expire(b.settings.Now())
-	return len(b.failures)
+
+	now := b.settings.Now()
+	b.refresh()
+	b.expire(now)
+
+	snap := Snapshot{State: b.state, Failures: len(b.failures)}
+	if b.state == StateOpen {
+		snap.OpenFor = now.Sub(b.openedAt)
+	}
+	return snap
 }
 
 // allow reserves capacity for one call, or explains why it cannot.
