@@ -3,42 +3,48 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"log"
 	"sync"
+
+	"github.com/Revsetai/staging-manual-repo/internal/queue"
 )
 
-// Job is a unit of work handed to the pool.
-type Job struct {
-	ID      string
-	Payload []byte
+// EventQueue is the queue behavior the pool needs. queue.Queue implements it.
+type EventQueue interface {
+	Pop(context.Context) (queue.Event, error)
 }
 
-// Handler processes a single job.
-type Handler func(ctx context.Context, j Job) error
+var _ EventQueue = (*queue.Queue)(nil)
 
-// Pool runs a fixed number of goroutines over a channel of jobs.
-//
-// TODO: the pool takes a bare channel, so it cannot see the queue's ordering
-// or depth. There is no timeout around the handler, no counters, and Stop
-// returns as soon as the channel drains whether or not the work finished.
+// Handler processes a single event.
+type Handler func(ctx context.Context, event queue.Event) error
+
+// Stats is a point-in-time view of worker activity.
+type Stats struct {
+	Processed int `json:"processed"`
+	Failed    int `json:"failed"`
+	Active    int `json:"active"`
+}
+
+// Pool runs a fixed number of goroutines over an event queue.
 type Pool struct {
-	jobs    <-chan Job
+	queue   EventQueue
 	handler Handler
 	size    int
 
 	wg sync.WaitGroup
 
-	mu        sync.Mutex
-	processed int
-	failed    int
+	mu    sync.Mutex
+	stats Stats
 }
 
-// NewPool builds a pool over the given job channel.
-func NewPool(jobs <-chan Job, h Handler, size int) *Pool {
+// NewPool builds a pool over the given event queue.
+func NewPool(events EventQueue, h Handler, size int) *Pool {
 	if size < 1 {
 		size = 4
 	}
-	return &Pool{jobs: jobs, handler: h, size: size}
+	return &Pool{queue: events, handler: h, size: size}
 }
 
 // Start launches the goroutines.
@@ -52,18 +58,31 @@ func (p *Pool) Start(ctx context.Context) {
 func (p *Pool) run(ctx context.Context) {
 	defer p.wg.Done()
 
-	for j := range p.jobs {
-		err := p.handler(ctx, j)
+	for {
+		event, err := p.queue.Pop(ctx)
+		if err != nil {
+			if !errors.Is(err, queue.ErrClosed) && !errors.Is(err, context.Canceled) {
+				log.Printf("worker: queue stopped: %v", err)
+			}
+			return
+		}
 
 		p.mu.Lock()
-		p.processed++
+		p.stats.Active++
+		p.mu.Unlock()
+
+		err = p.handler(ctx, event)
+
+		p.mu.Lock()
+		p.stats.Active--
+		p.stats.Processed++
 		if err != nil {
-			p.failed++
+			p.stats.Failed++
 		}
 		p.mu.Unlock()
 
 		if err != nil {
-			log.Printf("worker: job %s failed: %v", j.ID, err)
+			log.Printf("worker: event %s failed: %v", event.ID, err)
 		}
 	}
 }
@@ -75,14 +94,17 @@ func (p *Pool) Stop() {
 
 // Processed reports how many jobs have been handled.
 func (p *Pool) Processed() int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.processed
+	return p.Stats().Processed
 }
 
 // Failed reports how many jobs returned an error.
 func (p *Pool) Failed() int {
+	return p.Stats().Failed
+}
+
+// Stats returns a consistent copy of all worker counters.
+func (p *Pool) Stats() Stats {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return p.failed
+	return p.stats
 }
